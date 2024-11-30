@@ -227,3 +227,63 @@
     (ok tx-id)
   )
 )
+
+;; Approve timelocked withdrawal
+(define-public (approve-timelocked-withdrawal (tx-id uint))
+  (let 
+    (
+      (withdrawal 
+        (unwrap! 
+          (map-get? timelock-withdrawals tx-id) 
+          ERR-INVALID-TX
+        )
+      )
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+
+    (map-set timelock-withdrawals tx-id 
+      (merge withdrawal { approved: true })
+    )
+    (ok true)
+  )
+)
+
+;; Execute timelocked withdrawal
+(define-public (execute-timelocked-withdrawal (tx-id uint))
+  (let 
+    (
+      (withdrawal 
+        (unwrap! 
+          (map-get? timelock-withdrawals tx-id) 
+          ERR-INVALID-TX
+        )
+      )
+    )
+    ;; Check if withdrawal is approved and time has passed
+    (asserts! (get approved withdrawal) ERR-INVALID-TX)
+    (asserts! 
+      (>= (var-get current-block-height) (get release-block withdrawal)) 
+      ERR-INVALID-TX
+    )
+
+    ;; Transfer funds
+    (try! 
+      (stx-transfer? 
+        (get amount withdrawal) 
+        tx-sender 
+        (get recipient withdrawal)
+      )
+    )
+
+    (ok true)
+  )
+)
+
+;; Additional read-only functions for new features
+(define-read-only (get-daily-spending-limit (owner principal))
+  (map-get? daily-spending-limits owner)
+)
+
+(define-read-only (get-timelocked-withdrawal (tx-id uint))
+  (map-get? timelock-withdrawals tx-id)
+)
