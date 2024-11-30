@@ -80,3 +80,62 @@
     (ok true)
   )
 )
+
+;; Function to set daily spending limit for an owner
+(define-public (set-daily-spending-limit 
+  (owner principal) 
+  (limit uint)
+)
+  (begin
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+    (map-set daily-spending-limits owner limit)
+    (ok true)
+  )
+)
+
+;; Function to add a new owner
+(define-public (add-owner (new-owner principal))
+  (let 
+    (
+      (current-owners (var-get owners))
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+    (asserts! 
+      (is-none (index-of current-owners new-owner)) 
+      ERR-INVALID-TX
+    )
+
+    (var-set owners 
+      (unwrap-panic 
+        (as-max-len? (append current-owners new-owner) u10)
+      )
+    )
+    (ok true)
+  )
+)
+
+;; Variable to track current block height
+(define-data-var current-block-height uint u0)
+
+;; Function to increment block height
+(define-public (increment-block-height)
+    (begin
+        (var-set current-block-height 
+            (+ (var-get current-block-height) u1)
+        )
+        (ok true)
+    )
+)
+
+;; Function to get current block height
+(define-read-only (get-block-height)
+    (var-get current-block-height)
+)
+
+;; Function to manually set block height (useful for testing or initialization)
+(define-public (set-block-height (new-height uint))
+    (begin
+        (var-set current-block-height new-height)
+        (ok true)
+    )
+)
