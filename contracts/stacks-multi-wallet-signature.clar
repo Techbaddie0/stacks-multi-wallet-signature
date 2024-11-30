@@ -139,3 +139,91 @@
         (ok true)
     )
 )
+
+;; Propose a new transaction
+(define-public (propose-transaction (recipient principal) (amount uint))
+  (let 
+    (
+      (tx-id (var-get tx-count))
+      (new-tx {
+        recipient: recipient, 
+        amount: amount, 
+        signatures: (list tx-sender), 
+        executed: false
+      })
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+    (map-set transactions tx-id new-tx)
+    (var-set tx-count (+ tx-id u1))
+    (ok tx-id)
+  )
+)
+
+;; Sign a transaction
+(define-public (sign-transaction (tx-id uint))
+  (let 
+    (
+      (tx (unwrap! (map-get? transactions tx-id) ERR-INVALID-TX))
+      (updated-tx (merge tx {
+        signatures: (if (is-owner tx-sender)
+                        (unwrap-panic (as-max-len? (append (get signatures tx) tx-sender) u10))
+                        (get signatures tx))
+      }))
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+    (map-set transactions tx-id updated-tx)
+    (ok true)
+  )
+)
+
+;; Execute a transaction
+(define-public (execute-transaction (tx-id uint))
+  (let 
+    (
+      (tx (unwrap! (map-get? transactions tx-id) ERR-INVALID-TX))
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+    (asserts! (not (get executed tx)) ERR-INVALID-TX)
+    (asserts! 
+      (>= (len (get signatures tx)) (var-get threshold)) 
+      ERR-NOT-ENOUGH-SIGS
+    )
+
+    ;; Transfer STX and mark transaction as executed
+    (try! (stx-transfer? 
+      (get amount tx) 
+      tx-sender 
+      (get recipient tx)
+    ))
+
+    (map-set transactions tx-id 
+      (merge tx {executed: true})
+    )
+    (ok true)
+  )
+)
+
+;; Create a timelocked withdrawal
+(define-public (create-timelocked-withdrawal 
+  (recipient principal) 
+  (amount uint) 
+  (lock-period uint)
+)
+  (let 
+    (
+      (tx-id (var-get tx-count))
+      (release-block (+ (var-get current-block-height) lock-period))
+    )
+    (asserts! (is-owner tx-sender) ERR-NOT-OWNER)
+
+    (map-set timelock-withdrawals tx-id {
+      recipient: recipient,
+      amount: amount,
+      release-block: release-block,
+      approved: false
+    })
+
+    (var-set tx-count (+ tx-id u1))
+    (ok tx-id)
+  )
+)
